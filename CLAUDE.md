@@ -1,0 +1,79 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Canvas LMS MCP Server for ESPOL (Escuela Superior Politécnica del Litoral). Exposes Canvas LMS data via the Model Context Protocol (MCP) over HTTP. El consumidor principal es el **Jelou Agent** — el agente de IA de la plataforma [Jelou](https://jelou.ai) que se conecta al endpoint `/mcp` para responder preguntas académicas de los usuarios vía WhatsApp u otros canales de Jelou.
+
+## Commands
+
+This project uses `uv` for dependency management.
+
+```bash
+# Install dependencies
+uv sync
+
+# Run the MCP HTTP server (production/integration mode)
+uvicorn main:app --reload
+
+# Run the standalone CLI agent (interactive terminal chatbot)
+uv run python agent.py
+
+# Run MCP dev inspector
+mcp dev mcp_server.py
+```
+
+## Environment Variables
+
+Required in `.env`:
+
+```
+CANVAS_API_TOKEN=   # Canvas LMS bearer token
+CANVAS_BASE_URL=    # Canvas instance URL (e.g. https://espol.instructure.com)
+ANTHROPIC_API_KEY=  # Only needed for agent.py
+```
+
+## Architecture
+
+The project has two independent execution modes that share the same Canvas data layer:
+
+```
+canvas_client.py          CanvasClient (async httpx)
+      │                   Raw Canvas REST API v1 calls
+      │
+mcp_server.py             FastMCP instance
+      │                   @mcp.tool() wrappers that format responses as strings
+      │
+      ├── main.py          FastAPI app → mounts MCP at /mcp (streamable HTTP)
+      │                    Used by external integrations (Jelou, Claude Desktop, etc.)
+      │
+      └── agent.py         Standalone Anthropic SDK loop
+                           Re-imports the same tool functions from mcp_server.py
+                           Used for local CLI testing
+```
+
+### Key design decisions
+
+- `mcp_server.py` tools return **formatted strings** (not JSON) — the MCP protocol serializes them, and the LLM reads them as plain text.
+- `agent.py` duplicates the tool definitions (TOOLS list + TOOL_MAP) to drive its own `client.messages.create()` loop. It directly calls the same async functions from `mcp_server.py` via `call_tool()`.
+- `canvas_client.py` always creates a new `httpx.AsyncClient` per request (no persistent connection pool). All methods use `per_page=50` by default; Canvas paginates beyond that.
+- `config.py` uses `pydantic-settings` — env vars are automatically loaded from `.env` and validated at import time.
+
+### MCP server endpoint
+
+When running via `uvicorn main:app`, the MCP server is available at:
+- `http://localhost:8000/mcp` — streamable HTTP transport
+- `http://localhost:8000/health` — health check
+
+## Integración con Jelou
+
+El Jelou Agent se conecta al endpoint `/mcp` usando el transporte HTTP streamable de MCP. Jelou gestiona su propio historial de conversación (`messageHistory`) y llama a las tools de este servidor cuando el agente lo decide.
+
+**Comportamiento esperado del agente Jelou:**
+- Debe llamar herramientas Canvas (ej. `get_current_user`) *antes* de llamar `end_function`
+- Cuando `end_function` se llama sin texto de respuesta, Jelou reporta `endFunctionFallback: "empty_output"` y no envía nada al usuario — esto indica que el agente terminó prematuramente
+- El `saveInMemory` del JSON de Jelou guarda variables en su contexto; si contiene datos placeholder (`usuario@ejemplo.com`) significa que las tools Canvas nunca se ejecutaron
+
+**Variables de entorno que Jelou debe enviar/configurar:**
+- El `CANVAS_API_TOKEN` debe corresponder al usuario autenticado en Canvas para que `get_current_user` retorne datos reales
