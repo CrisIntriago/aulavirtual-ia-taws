@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import httpx
 from config import settings
 
@@ -33,8 +35,54 @@ class CanvasClient:
     async def get_course(self, course_id: int) -> dict:
         return await self._get(f"/courses/{course_id}")
 
-    async def get_assignments(self, course_id: int) -> list:
-        return await self._get(f"/courses/{course_id}/assignments", {"per_page": 50})
+    async def get_assignments(
+        self,
+        course_ids: list[int] | None = None,
+        days_ahead: int = 7,
+        per_page: int = 20
+    ):
+        active_courses = await self.get_active_course_ids()
+        if not course_ids:
+            course_ids = [cid for (cid, name) in active_courses]
+
+        all_assignments = []
+        now = datetime.now(timezone.utc)
+        end_week = now + timedelta(days=days_ahead)
+        
+        for course_id in course_ids:
+            assignments = await self._get(
+                f"/courses/{course_id}/assignments",
+                {
+                    "per_page": per_page,
+                    "bucket": "upcoming"
+                }
+            )
+            filtered = []
+            for a in assignments:
+                a["course_id"] = course_id
+                due_at = a.get("due_at")
+                if not due_at:
+                    filtered.append(a)
+                    continue
+                due_date = datetime.fromisoformat(
+                    due_at.replace("Z", "+00:00")
+                )
+
+                if due_date >= now and due_date <= end_week:
+                    filtered.append(a)
+                 
+            all_assignments.extend(filtered)
+        all_assignments.sort(
+            key=lambda a: (
+                a.get("due_at") is None,
+                a.get("due_at") or "9999-12-31T23:59:59Z"
+            )
+        )
+        response = {
+            "assignments": all_assignments,
+            "course_names": [name for (cid, name) in active_courses]
+        }
+        return response
 
     async def get_assignment(self, course_id: int, assignment_id: int) -> dict:
         return await self._get(f"/courses/{course_id}/assignments/{assignment_id}")

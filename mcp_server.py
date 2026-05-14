@@ -62,23 +62,26 @@ async def get_course(course_id: int) -> str:
 
 
 @mcp.tool()
-async def get_assignments(course_id: int) -> str:
+async def get_assignments(
+    course_ids: list[int] | None = None,
+    days_ahead: int | None = 7,
+    per_page: int = 20
+):
     """
-    Lista todas las asignaciones/tareas de un curso.
+    📚 Obtiene tareas pendientes de cursos activos.
 
-    Args:
-        course_id: ID numérico del curso.
+    Si no se especifican cursos, se consultarán
+    automáticamente los cursos activos del usuario.
+    ES PREFERIBLE MANDAR NONE PARA OBTENER LAS TAREAS DE TODOS LOS CURSOS PORQE ES MAS EFICIENTE
     """
-    assignments = await canvas.get_assignments(course_id)
-    if not assignments:
-        return "Este curso no tiene tareas registradas."
-    lines = [f"El curso tiene {len(assignments)} tarea(s):\n"]
-    for a in assignments:
-        due = a.get("due_at") or "sin fecha límite"
-        pts = a.get("points_possible")
-        pts_str = f"{pts} pts" if pts is not None else "sin puntaje"
-        lines.append(f"- **{a.get('name')}** (ID: {a.get('id')}) — Entrega: {due} — {pts_str}")
-    return "\n".join(lines)
+
+    assignments_response = await canvas.get_assignments(
+        course_ids=course_ids,
+        days_ahead=days_ahead,
+        per_page=per_page
+    )
+
+    return assignments_response
 
 
 @mcp.tool()
