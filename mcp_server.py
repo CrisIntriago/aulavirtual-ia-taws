@@ -1,5 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from canvas_client import canvas
+import re
+from datetime import datetime
 
 mcp = FastMCP(
     name="canvas-lms-espol",
@@ -184,27 +186,35 @@ async def get_modules(course_id: int) -> str:
         lines.append(f"- **{m.get('name')}** (ID: {m.get('id')}) — {items} ítem(s) — {state}")
     return "\n".join(lines)
 
-
 @mcp.tool()
-async def get_announcements(course_id: int) -> str:
+async def get_announcements(
+    course_ids: list[int] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    latest_only: bool = False,
+    active_only: bool = True,
+    per_page: int = 20
+) -> str:
     """
-    Lista los anuncios recientes de un curso.
+    📢 Obtiene anuncios de Canvas LMS para uno o varios cursos.
 
-    Args:
-        course_id: ID del curso.
+    Si no se especifican cursos, se consultarán automáticamente
+    todos los cursos activos del usuario autenticado.
+
+    Devuelve anuncios en un formato compacto, amigable y fácil
+    de leer para chat.
     """
-    import re
-    announcements = await canvas.get_announcements(course_id)
-    if not announcements:
-        return "No hay anuncios recientes en este curso."
-    lines = [f"Hay **{len(announcements)}** anuncio(s) reciente(s):\n"]
-    for a in announcements:
-        fecha = a.get("posted_at") or a.get("created_at") or "fecha desconocida"
-        msg = re.sub(r"<[^>]+>", " ", a.get("message", "")).strip()
-        msg = msg[:150] + "..." if len(msg) > 150 else msg
-        lines.append(f"- **{a.get('title')}** ({fecha}): {msg}")
-    return "\n".join(lines)
 
+
+    ann_response = await canvas.get_announcements(
+        course_ids=course_ids,
+        start_date=start_date,
+        end_date=end_date,
+        latest_only=latest_only,
+        active_only=active_only,
+        per_page=per_page
+    )
+    return ann_response
 
 @mcp.tool()
 async def get_discussions(course_id: int) -> str:

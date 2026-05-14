@@ -57,11 +57,65 @@ class CanvasClient:
     async def get_modules(self, course_id: int) -> list:
         return await self._get(f"/courses/{course_id}/modules", {"per_page": 50})
 
-    async def get_announcements(self, course_id: int) -> list:
-        return await self._get(
-            "/announcements",
-            {"context_codes[]": f"course_{course_id}", "per_page": 20},
+    async def get_active_course_ids(self) -> list[int]:
+        courses = await self._get(
+            "/courses",
+            {
+                "enrollment_state": "active",
+                "state[]": ["available"],
+                "per_page": 100
+            }
         )
+
+        if not courses:
+            return []
+
+        course_id_name_tuples = []
+
+        for course in courses:
+            course_id = course.get("id")
+            name = course.get("name")
+            if course_id is not None and name is not None:
+                course_id_name_tuples.append((course_id, name))
+
+        return course_id_name_tuples
+
+    async def get_announcements(self,
+        course_ids: list[int] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        latest_only: bool = False,
+        active_only: bool = True,
+        per_page: int = 20
+    ):
+        
+        active_courses_ids = await self.get_active_course_ids()
+        params = {
+            "per_page": per_page,
+            "active_only": active_only,
+            "latest_only": latest_only,
+        }
+
+        if start_date:
+            params["start_date"] = start_date
+
+        if end_date:
+            params["end_date"] = end_date
+
+        if course_ids:
+            params["context_codes[]"] = [
+                f"course_{cid}" for cid in course_ids
+            ]
+        else:
+            params["context_codes[]"] = [f"course_{cid}" for (cid, name) in active_courses_ids]
+        announcements =  await self._get(
+            "/announcements",
+            params
+        )
+        return {
+            "announcements": announcements,
+            "course_names": [name for (cid, name) in active_courses_ids]
+        }
 
     async def get_discussions(self, course_id: int) -> list:
         return await self._get(f"/courses/{course_id}/discussion_topics", {"per_page": 50})
