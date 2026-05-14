@@ -199,16 +199,24 @@ async def get_announcements(
     per_page: int = 20
 ) -> str:
     """
-    📢 Obtiene anuncios de Canvas LMS para uno o varios cursos.
+    📢 Obtiene novedades académicas de Canvas LMS.
 
-    Si no se especifican cursos, se consultarán automáticamente
-    todos los cursos activos del usuario autenticado.
+    La respuesta mezcla:
+    - anuncios
+    - tareas próximas
+    - quizzes próximos
 
-    Devuelve anuncios en un formato compacto, amigable y fácil
-    de leer para chat.
+    en una sola línea temporal ordenada cronológicamente.
+
+    Cada elemento incluye un campo:
+    - type = announcement | assignment
+
+    IMPORTANTE:
+    Las tareas también deben mostrarse al usuario
+    como parte de las novedades académicas.
     """
 
-
+    DEFAULT_DAYS_AHEAD = 7
     ann_response = await canvas.get_announcements(
         course_ids=course_ids,
         start_date=start_date,
@@ -217,8 +225,51 @@ async def get_announcements(
         active_only=active_only,
         per_page=per_page
     )
-    return ann_response
+    days_ahead = DEFAULT_DAYS_AHEAD
 
+    if start_date and end_date:
+        start = datetime.fromisoformat(start_date)
+        end = datetime.fromisoformat(end_date)
+
+        days_ahead = max((end - start).days, 1)
+
+    assignments_response = await canvas.get_assignments(
+        course_ids=course_ids,
+        days_ahead=days_ahead,
+        per_page=per_page
+    )
+    combined = []
+    combined_courses = [*ann_response["course_names"], *assignments_response["course_names"] ]
+    for a in ann_response["announcements"]:
+        combined.append({
+            "type": "announcement",
+            "course_id": a.get("context_code"),
+            "title": a.get("title"),
+            "message": a.get("message"),
+            "date": (
+                a.get("posted_at")
+                or a.get("created_at")
+            )
+        })
+    for a in assignments_response["assignments"]:
+        combined.append({
+            "type": "assignment",
+            "course_id": a.get("course_id"),
+            "title": a.get("name"),
+            "message": a.get("description"),
+            "date": a.get("due_at"),
+            "points": a.get("points_possible")
+        })
+    combined.sort(
+        key=lambda x: (
+            x.get("date") is None,
+            x.get("date") or "9999-12-31T23:59:59Z"
+        )
+    )
+    return {
+        "updates": combined,
+        "course_names": combined_courses
+    }
 @mcp.tool()
 async def get_discussions(course_id: int) -> str:
     """

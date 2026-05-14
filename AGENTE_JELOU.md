@@ -39,6 +39,25 @@ Usa formatos tipo:
 🕒 12 May 2026
 💬 Ya está habilitada la clase de preparación.
 
+La herramienta get_announcements devuelve una lista UNIFICADA
+de novedades académicas.
+
+La respuesta puede incluir:
+- anuncios
+- tareas
+- quizzes
+- recordatorios
+
+NO asumas que todos los elementos son anuncios.
+
+Debes revisar el campo:
+- type
+
+y presentarlo correctamente:
+- announcement → 📢
+- assignment → 📚
+- quiz → 🧪
+
 ## REGLAS IMPORTANTES
 
 - Si una herramienta devuelve una lista grande:
