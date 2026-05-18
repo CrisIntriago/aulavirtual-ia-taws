@@ -1,13 +1,22 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from canvas_client import canvas
 from mcp_server import mcp
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with mcp.session_manager.run():
         yield
+    await canvas.aclose()
 
 
 app = FastAPI(

@@ -1,7 +1,9 @@
-from mcp.server.fastmcp import FastMCP
-from canvas_client import canvas
+import asyncio
 import re
 from datetime import datetime
+
+from mcp.server.fastmcp import FastMCP
+from canvas_client import canvas
 
 mcp = FastMCP(
     name="canvas-lms-espol",
@@ -217,26 +219,30 @@ async def get_announcements(
     """
 
     DEFAULT_DAYS_AHEAD = 7
-    ann_response = await canvas.get_announcements(
-        course_ids=course_ids,
-        start_date=start_date,
-        end_date=end_date,
-        latest_only=latest_only,
-        active_only=active_only,
-        per_page=per_page
-    )
     days_ahead = DEFAULT_DAYS_AHEAD
-
     if start_date and end_date:
         start = datetime.fromisoformat(start_date)
         end = datetime.fromisoformat(end_date)
-
         days_ahead = max((end - start).days, 1)
 
-    assignments_response = await canvas.get_assignments(
-        course_ids=course_ids,
-        days_ahead=days_ahead,
-        per_page=per_page
+    # Fetch course list once, then run announcements + assignments in parallel
+    active_courses = await canvas.get_active_course_ids()
+    ann_response, assignments_response = await asyncio.gather(
+        canvas.get_announcements(
+            course_ids=course_ids,
+            active_courses=active_courses,
+            start_date=start_date,
+            end_date=end_date,
+            latest_only=latest_only,
+            active_only=active_only,
+            per_page=per_page,
+        ),
+        canvas.get_assignments(
+            course_ids=course_ids,
+            active_courses=active_courses,
+            days_ahead=days_ahead,
+            per_page=per_page,
+        ),
     )
     combined = []
     combined_courses = [*ann_response["course_names"], *assignments_response["course_names"] ]
