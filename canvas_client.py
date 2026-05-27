@@ -14,6 +14,8 @@ FALLBACK_TOKEN_PURPOSE = "aulavirtual-taws-mcp-fallback"
 
 
 def prompt_canvas_token() -> str:
+    if settings.canvas_api_token:
+        return settings.canvas_api_token
     if not sys.stdin.isatty():
         token = input("Ingresa tu Canvas API token: ").strip()
     else:
