@@ -24,6 +24,7 @@ app = FastAPI(
     description="Servidor MCP para interactuar con Canvas LMS de la ESPOL",
     version="0.1.0",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 app.add_middleware(
