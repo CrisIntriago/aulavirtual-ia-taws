@@ -28,6 +28,7 @@ uv sync
 
 uv run uvicorn main:app --reload
 ```
+Al ejecutar el servidor, la app pedira por CLI el token de Canvas LMS. Este token no se lee desde `.env` ni se guarda; solo queda en memoria mientras el proceso esta activo.
 
 2. En otro terminal mientras el anterior se está ejecutando ejecutar (8000 ES EL MISMO PUERTO QUE SALE DE EJECUTAR EL COMANDO ANTERIOR POR DEFECTO FASTMCP USA EL PUERTO 8000, consultar el terminal):
 ```
