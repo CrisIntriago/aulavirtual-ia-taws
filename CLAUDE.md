@@ -29,10 +29,11 @@ mcp dev mcp_server.py
 Required in `.env`:
 
 ```
-CANVAS_API_TOKEN=   # Canvas LMS bearer token
 CANVAS_BASE_URL=    # Canvas instance URL (e.g. https://espol.instructure.com)
 ANTHROPIC_API_KEY=  # Only needed for agent.py
 ```
+
+`CANVAS_API_TOKEN` is requested from the CLI when the app starts. It is not read from `.env` and is not persisted by the app.
 
 ## Architecture
 
@@ -60,6 +61,8 @@ mcp_server.py             FastMCP instance
 - `canvas_client.py` always creates a new `httpx.AsyncClient` per request (no persistent connection pool). All methods use `per_page=50` by default; Canvas paginates beyond that.
 - `config.py` uses `pydantic-settings` — env vars are automatically loaded from `.env` and validated at import time.
 
+- The Canvas token is requested by CLI at runtime, not loaded from `.env`.
+
 ### MCP server endpoint
 
 When running via `uvicorn main:app`, the MCP server is available at:
@@ -75,5 +78,5 @@ El Jelou Agent se conecta al endpoint `/mcp` usando el transporte HTTP streamabl
 - Cuando `end_function` se llama sin texto de respuesta, Jelou reporta `endFunctionFallback: "empty_output"` y no envía nada al usuario — esto indica que el agente terminó prematuramente
 - El `saveInMemory` del JSON de Jelou guarda variables en su contexto; si contiene datos placeholder (`usuario@ejemplo.com`) significa que las tools Canvas nunca se ejecutaron
 
-**Variables de entorno que Jelou debe enviar/configurar:**
-- El `CANVAS_API_TOKEN` debe corresponder al usuario autenticado en Canvas para que `get_current_user` retorne datos reales
+**Token de Canvas:**
+- El token ingresado por CLI debe corresponder al usuario autenticado en Canvas para que `get_current_user` retorne datos reales
