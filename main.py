@@ -2,7 +2,6 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from canvas_client import canvas
 from mcp_server import mcp
 
 logging.basicConfig(
@@ -16,7 +15,6 @@ logging.basicConfig(
 async def lifespan(app: FastAPI):
     async with mcp.session_manager.run():
         yield
-    await canvas.aclose()
 
 
 app = FastAPI(
@@ -40,4 +38,3 @@ app.mount("/mcp", mcp.streamable_http_app())
 @app.get("/health")
 async def health():
     return {"status": "ok", "server": "canvas-lms-espol"}
-    

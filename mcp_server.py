@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
-from canvas_client import canvas
+from canvas_client import CanvasClient
 
 mcp = FastMCP(
     name="canvas-lms-espol",
@@ -12,10 +12,20 @@ mcp = FastMCP(
 )
 
 
+def _client(canvas_token: str) -> CanvasClient:
+    return CanvasClient(canvas_token)
+
+
 @mcp.tool()
-async def get_current_user() -> str:
-    """Obtiene el perfil del usuario actualmente autenticado."""
-    u = await canvas.get_current_user()
+async def get_current_user(canvas_token: str) -> str:
+    """
+    Obtiene el perfil del usuario actualmente autenticado.
+
+    Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
+    """
+    async with _client(canvas_token) as canvas:
+        u = await canvas.get_current_user()
     name = u.get("name", "Desconocido")
     login = u.get("login_id") or u.get("primary_email") or "no disponible"
     uid = u.get("id", "?")
@@ -23,14 +33,16 @@ async def get_current_user() -> str:
 
 
 @mcp.tool()
-async def get_courses(enrollment_type: str = "") -> str:
+async def get_courses(canvas_token: str, enrollment_type: str = "") -> str:
     """
     Lista los cursos del usuario autenticado.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         enrollment_type: Filtrar por tipo de matrícula. Valores: student, teacher, ta, observer, designer. Dejar vacío para todos.
     """
-    courses = await canvas.get_courses(enrollment_type or None)
+    async with _client(canvas_token) as canvas:
+        courses = await canvas.get_courses(enrollment_type or None)
     if not courses:
         return "No se encontraron cursos para este usuario."
     lines = [f"Se encontraron {len(courses)} curso(s):\n"]
@@ -41,14 +53,16 @@ async def get_courses(enrollment_type: str = "") -> str:
 
 
 @mcp.tool()
-async def get_course(course_id: int) -> str:
+async def get_course(canvas_token: str, course_id: int) -> str:
     """
     Obtiene el detalle de un curso.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID numérico del curso.
     """
-    c = await canvas.get_course(course_id)
+    async with _client(canvas_token) as canvas:
+        c = await canvas.get_course(course_id)
     name = c.get("name") or c.get("course_code") or "Sin nombre"
     code = c.get("course_code", "N/A")
     start = c.get("start_at") or "no especificada"
@@ -65,6 +79,7 @@ async def get_course(course_id: int) -> str:
 
 @mcp.tool()
 async def get_assignments(
+    canvas_token: str,
     course_ids: list[int] | None = None,
     days_ahead: int | None = 7,
     per_page: int = 20
@@ -72,36 +87,36 @@ async def get_assignments(
     """
     📚 Obtiene tareas pendientes de cursos activos.
 
-    Si no se especifican cursos, se consultarán
-    automáticamente los cursos activos del usuario.
-    ES PREFERIBLE MANDAR NONE PARA OBTENER LAS TAREAS DE TODOS LOS CURSOS PORQE ES MAS EFICIENTE
+    Si no se especifican cursos, se consultarán automáticamente los cursos activos del usuario.
+    ES PREFERIBLE MANDAR NONE PARA OBTENER LAS TAREAS DE TODOS LOS CURSOS PORQUE ES MAS EFICIENTE.
+
+    Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
     """
-
-    assignments_response = await canvas.get_assignments(
-        course_ids=course_ids,
-        days_ahead=days_ahead,
-        per_page=per_page
-    )
-
-    return assignments_response
+    async with _client(canvas_token) as canvas:
+        return await canvas.get_assignments(
+            course_ids=course_ids,
+            days_ahead=days_ahead,
+            per_page=per_page
+        )
 
 
 @mcp.tool()
-async def get_assignment(course_id: int, assignment_id: int) -> str:
+async def get_assignment(canvas_token: str, course_id: int, assignment_id: int) -> str:
     """
     Obtiene el detalle de una asignación específica.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
         assignment_id: ID de la asignación.
     """
-    a = await canvas.get_assignment(course_id, assignment_id)
+    async with _client(canvas_token) as canvas:
+        a = await canvas.get_assignment(course_id, assignment_id)
     due = a.get("due_at") or "sin fecha límite"
     pts = a.get("points_possible")
     pts_str = f"{pts} puntos" if pts is not None else "sin puntaje definido"
     desc = a.get("description") or "sin descripción"
-    # Strip HTML tags simply
-    import re
     desc = re.sub(r"<[^>]+>", " ", desc).strip()
     desc = desc[:300] + "..." if len(desc) > 300 else desc
     return (
@@ -113,15 +128,17 @@ async def get_assignment(course_id: int, assignment_id: int) -> str:
 
 
 @mcp.tool()
-async def get_submissions(course_id: int, assignment_id: int) -> str:
+async def get_submissions(canvas_token: str, course_id: int, assignment_id: int) -> str:
     """
     Lista las entregas de los estudiantes para una asignación.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
         assignment_id: ID de la asignación.
     """
-    subs = await canvas.get_submissions(course_id, assignment_id)
+    async with _client(canvas_token) as canvas:
+        subs = await canvas.get_submissions(course_id, assignment_id)
     if not subs:
         return "No hay entregas registradas para esta asignación."
     total = len(subs)
@@ -138,14 +155,16 @@ async def get_submissions(course_id: int, assignment_id: int) -> str:
 
 
 @mcp.tool()
-async def get_students(course_id: int) -> str:
+async def get_students(canvas_token: str, course_id: int) -> str:
     """
     Lista los estudiantes matriculados en un curso.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    students = await canvas.get_students(course_id)
+    async with _client(canvas_token) as canvas:
+        students = await canvas.get_students(course_id)
     if not students:
         return "No se encontraron estudiantes matriculados en este curso."
     lines = [f"El curso tiene **{len(students)}** estudiante(s) matriculado(s):\n"]
@@ -155,14 +174,16 @@ async def get_students(course_id: int) -> str:
 
 
 @mcp.tool()
-async def get_enrollments(course_id: int) -> str:
+async def get_enrollments(canvas_token: str, course_id: int) -> str:
     """
     Lista todas las matrículas de un curso (estudiantes, profesores, etc).
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    enrollments = await canvas.get_enrollments(course_id)
+    async with _client(canvas_token) as canvas:
+        enrollments = await canvas.get_enrollments(course_id)
     if not enrollments:
         return "No se encontraron matrículas para este curso."
     lines = [f"El curso tiene **{len(enrollments)}** matrícula(s):\n"]
@@ -174,14 +195,16 @@ async def get_enrollments(course_id: int) -> str:
 
 
 @mcp.tool()
-async def get_modules(course_id: int) -> str:
+async def get_modules(canvas_token: str, course_id: int) -> str:
     """
     Lista los módulos de contenido de un curso.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    modules = await canvas.get_modules(course_id)
+    async with _client(canvas_token) as canvas:
+        modules = await canvas.get_modules(course_id)
     if not modules:
         return "Este curso no tiene módulos de contenido."
     lines = [f"El curso tiene **{len(modules)}** módulo(s):\n"]
@@ -191,8 +214,10 @@ async def get_modules(course_id: int) -> str:
         lines.append(f"- **{m.get('name')}** (ID: {m.get('id')}) — {items} ítem(s) — {state}")
     return "\n".join(lines)
 
+
 @mcp.tool()
 async def get_announcements(
+    canvas_token: str,
     course_ids: list[int] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
@@ -203,21 +228,15 @@ async def get_announcements(
     """
     📢 Obtiene novedades académicas de Canvas LMS.
 
-    La respuesta mezcla:
-    - anuncios
-    - tareas próximas
-    - quizzes próximos
+    La respuesta mezcla anuncios, tareas próximas y quizzes próximos en una sola línea
+    temporal ordenada cronológicamente. Cada elemento incluye un campo type:
+    announcement | assignment
 
-    en una sola línea temporal ordenada cronológicamente.
+    IMPORTANTE: Las tareas también deben mostrarse al usuario como parte de las novedades.
 
-    Cada elemento incluye un campo:
-    - type = announcement | assignment
-
-    IMPORTANTE:
-    Las tareas también deben mostrarse al usuario
-    como parte de las novedades académicas.
+    Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
     """
-
     DEFAULT_DAYS_AHEAD = 7
     days_ahead = DEFAULT_DAYS_AHEAD
     if start_date and end_date:
@@ -225,37 +244,35 @@ async def get_announcements(
         end = datetime.fromisoformat(end_date)
         days_ahead = max((end - start).days, 1)
 
-    # Fetch course list once, then run announcements + assignments in parallel
-    active_courses = await canvas.get_active_course_ids()
-    ann_response, assignments_response = await asyncio.gather(
-        canvas.get_announcements(
-            course_ids=course_ids,
-            active_courses=active_courses,
-            start_date=start_date,
-            end_date=end_date,
-            latest_only=latest_only,
-            active_only=active_only,
-            per_page=per_page,
-        ),
-        canvas.get_assignments(
-            course_ids=course_ids,
-            active_courses=active_courses,
-            days_ahead=days_ahead,
-            per_page=per_page,
-        ),
-    )
+    async with _client(canvas_token) as canvas:
+        active_courses = await canvas.get_active_course_ids()
+        ann_response, assignments_response = await asyncio.gather(
+            canvas.get_announcements(
+                course_ids=course_ids,
+                active_courses=active_courses,
+                start_date=start_date,
+                end_date=end_date,
+                latest_only=latest_only,
+                active_only=active_only,
+                per_page=per_page,
+            ),
+            canvas.get_assignments(
+                course_ids=course_ids,
+                active_courses=active_courses,
+                days_ahead=days_ahead,
+                per_page=per_page,
+            ),
+        )
+
     combined = []
-    combined_courses = [*ann_response["course_names"], *assignments_response["course_names"] ]
+    combined_courses = [*ann_response["course_names"], *assignments_response["course_names"]]
     for a in ann_response["announcements"]:
         combined.append({
             "type": "announcement",
             "course_id": a.get("context_code"),
             "title": a.get("title"),
             "message": a.get("message"),
-            "date": (
-                a.get("posted_at")
-                or a.get("created_at")
-            )
+            "date": a.get("posted_at") or a.get("created_at"),
         })
     for a in assignments_response["assignments"]:
         combined.append({
@@ -264,27 +281,31 @@ async def get_announcements(
             "title": a.get("name"),
             "message": a.get("description"),
             "date": a.get("due_at"),
-            "points": a.get("points_possible")
+            "points": a.get("points_possible"),
         })
     combined.sort(
         key=lambda x: (
             x.get("date") is None,
-            x.get("date") or "9999-12-31T23:59:59Z"
+            x.get("date") or "9999-12-31T23:59:59Z",
         )
     )
     return {
         "updates": combined,
-        "course_names": combined_courses
+        "course_names": combined_courses,
     }
+
+
 @mcp.tool()
-async def get_discussions(course_id: int) -> str:
+async def get_discussions(canvas_token: str, course_id: int) -> str:
     """
     Lista los foros de discusión de un curso.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    discussions = await canvas.get_discussions(course_id)
+    async with _client(canvas_token) as canvas:
+        discussions = await canvas.get_discussions(course_id)
     if not discussions:
         return "Este curso no tiene foros de discusión."
     lines = [f"El curso tiene **{len(discussions)}** foro(s) de discusión:\n"]
@@ -296,15 +317,17 @@ async def get_discussions(course_id: int) -> str:
 
 
 @mcp.tool()
-async def get_student_grades(course_id: int, student_id: int) -> str:
+async def get_student_grades(canvas_token: str, course_id: int, student_id: int) -> str:
     """
     Obtiene las notas de un estudiante en un curso.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
         student_id: ID del estudiante.
     """
-    enrollments = await canvas.get_grades(course_id, student_id)
+    async with _client(canvas_token) as canvas:
+        enrollments = await canvas.get_grades(course_id, student_id)
     if not enrollments:
         return "No se encontraron calificaciones para este estudiante en el curso."
     lines = []
@@ -323,14 +346,16 @@ async def get_student_grades(course_id: int, student_id: int) -> str:
 
 
 @mcp.tool()
-async def get_quizzes(course_id: int) -> str:
+async def get_quizzes(canvas_token: str, course_id: int) -> str:
     """
     Lista los cuestionarios/quizzes de un curso.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    quizzes = await canvas.get_quiz_list(course_id)
+    async with _client(canvas_token) as canvas:
+        quizzes = await canvas.get_quiz_list(course_id)
     if not quizzes:
         return "Este curso no tiene cuestionarios."
     lines = [f"El curso tiene **{len(quizzes)}** cuestionario(s):\n"]
@@ -343,15 +368,17 @@ async def get_quizzes(course_id: int) -> str:
 
 
 @mcp.tool()
-async def get_quiz(course_id: int, quiz_id: int) -> str:
+async def get_quiz(canvas_token: str, course_id: int, quiz_id: int) -> str:
     """
     Obtiene el detalle de un cuestionario.
 
     Args:
+        canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
         quiz_id: ID del cuestionario.
     """
-    q = await canvas.get_quiz(course_id, quiz_id)
+    async with _client(canvas_token) as canvas:
+        q = await canvas.get_quiz(course_id, quiz_id)
     due = q.get("due_at") or "sin fecha límite"
     pts = q.get("points_possible")
     pts_str = f"{pts} puntos" if pts is not None else "sin puntaje definido"
