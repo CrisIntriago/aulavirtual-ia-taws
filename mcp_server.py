@@ -1,6 +1,6 @@
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from mcp.server.fastmcp import FastMCP
 from canvas_client import CanvasClient
@@ -14,6 +14,28 @@ mcp = FastMCP(
 
 def _client(canvas_token: str) -> CanvasClient:
     return CanvasClient(canvas_token)
+
+
+@mcp.tool()
+def get_current_datetime() -> str:
+    """
+    Retorna la fecha y hora actual del servidor en zona horaria UTC y en hora de Ecuador (UTC-5).
+
+    Úsala SIEMPRE antes de responder preguntas que mencionen "hoy", "mañana", "esta semana",
+    "próximos días" o cualquier referencia temporal relativa.
+    """
+    now_utc = datetime.now(timezone.utc)
+    # Ecuador es UTC-5
+    from datetime import timedelta
+    now_ec = now_utc - timedelta(hours=5)
+    return (
+        f"Fecha y hora actual:\n"
+        f"- UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+        f"- Ecuador (UTC-5): {now_ec.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"- Fecha de hoy (Ecuador): {now_ec.strftime('%Y-%m-%d')}\n"
+        f"- ISO para filtros: inicio del día = {now_ec.strftime('%Y-%m-%d')}T00:00:00, "
+        f"fin del día = {now_ec.strftime('%Y-%m-%d')}T23:59:59"
+    )
 
 
 @mcp.tool()
@@ -234,8 +256,13 @@ async def get_announcements(
 
     IMPORTANTE: Las tareas también deben mostrarse al usuario como parte de las novedades.
 
+    IMPORTANTE: Si el usuario pregunta por "hoy", "mañana" o cualquier fecha relativa,
+    llama PRIMERO a get_current_datetime para conocer la fecha real antes de usar este tool.
+
     Args:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
+        start_date: Fecha de inicio en formato ISO (YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS). Opcional.
+        end_date: Fecha de fin en formato ISO. Opcional.
     """
     DEFAULT_DAYS_AHEAD = 7
     days_ahead = DEFAULT_DAYS_AHEAD
