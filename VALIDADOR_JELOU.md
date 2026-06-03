@@ -28,7 +28,7 @@ Llama `get_current_user` con el valor recibido como `canvas_token`.
 
 ```json
 {
-  "output_schema": "{\"status\": \"completed\", \"intent\": \"validar_token\", \"data\": {\"token\": \"<token recibido del usuario>\"}, \"message\": \"Token validado correctamente\"}"
+  "output_schema": "{\"token\": \"<token recibido del usuario>\", \"status\": \"completed\", \"message\": \"Token validado correctamente\"}"
 }
 ```
 

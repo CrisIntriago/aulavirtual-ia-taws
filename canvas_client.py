@@ -13,7 +13,7 @@ class CanvasClient:
         self.base_url = settings.canvas_base_url.rstrip("/")
         self._client = httpx.AsyncClient(
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {token.strip()}",
                 "Content-Type": "application/json",
             },
             timeout=30.0,
