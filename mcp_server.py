@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from mcp.server.fastmcp import FastMCP
 from canvas_client import CanvasClient
+from token_manager import token_manager
 
 mcp = FastMCP(
     name="canvas-lms-espol",
@@ -12,8 +13,9 @@ mcp = FastMCP(
 )
 
 
-def _client(canvas_token: str) -> CanvasClient:
-    return CanvasClient(canvas_token)
+async def _client(canvas_token: str) -> CanvasClient:
+    active_token = await token_manager.get_active_token(canvas_token)
+    return CanvasClient(active_token)
 
 
 @mcp.tool()
@@ -46,7 +48,7 @@ async def get_current_user(canvas_token: str) -> str:
     Args:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         u = await canvas.get_current_user()
     name = u.get("name", "Desconocido")
     login = u.get("login_id") or u.get("primary_email") or "no disponible"
@@ -63,7 +65,7 @@ async def get_courses(canvas_token: str, enrollment_type: str = "") -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         enrollment_type: Filtrar por tipo de matrícula. Valores: student, teacher, ta, observer, designer. Dejar vacío para todos.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         courses = await canvas.get_courses(enrollment_type or None)
     if not courses:
         return "No se encontraron cursos para este usuario."
@@ -83,7 +85,7 @@ async def get_course(canvas_token: str, course_id: int) -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID numérico del curso.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         c = await canvas.get_course(course_id)
     name = c.get("name") or c.get("course_code") or "Sin nombre"
     code = c.get("course_code", "N/A")
@@ -115,7 +117,7 @@ async def get_assignments(
     Args:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         return await canvas.get_assignments(
             course_ids=course_ids,
             days_ahead=days_ahead,
@@ -133,7 +135,7 @@ async def get_assignment(canvas_token: str, course_id: int, assignment_id: int) 
         course_id: ID del curso.
         assignment_id: ID de la asignación.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         a = await canvas.get_assignment(course_id, assignment_id)
     due = a.get("due_at") or "sin fecha límite"
     pts = a.get("points_possible")
@@ -159,7 +161,7 @@ async def get_submissions(canvas_token: str, course_id: int, assignment_id: int)
         course_id: ID del curso.
         assignment_id: ID de la asignación.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         subs = await canvas.get_submissions(course_id, assignment_id)
     if not subs:
         return "No hay entregas registradas para esta asignación."
@@ -185,7 +187,7 @@ async def get_students(canvas_token: str, course_id: int) -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         students = await canvas.get_students(course_id)
     if not students:
         return "No se encontraron estudiantes matriculados en este curso."
@@ -204,7 +206,7 @@ async def get_enrollments(canvas_token: str, course_id: int) -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         enrollments = await canvas.get_enrollments(course_id)
     if not enrollments:
         return "No se encontraron matrículas para este curso."
@@ -225,7 +227,7 @@ async def get_modules(canvas_token: str, course_id: int) -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         modules = await canvas.get_modules(course_id)
     if not modules:
         return "Este curso no tiene módulos de contenido."
@@ -271,7 +273,7 @@ async def get_announcements(
         end = datetime.fromisoformat(end_date)
         days_ahead = max((end - start).days, 1)
 
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         active_courses = await canvas.get_active_course_ids()
         ann_response, assignments_response = await asyncio.gather(
             canvas.get_announcements(
@@ -331,7 +333,7 @@ async def get_discussions(canvas_token: str, course_id: int) -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         discussions = await canvas.get_discussions(course_id)
     if not discussions:
         return "Este curso no tiene foros de discusión."
@@ -353,7 +355,7 @@ async def get_student_grades(canvas_token: str, course_id: int, student_id: int)
         course_id: ID del curso.
         student_id: ID del estudiante.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         enrollments = await canvas.get_grades(course_id, student_id)
     if not enrollments:
         return "No se encontraron calificaciones para este estudiante en el curso."
@@ -381,7 +383,7 @@ async def get_quizzes(canvas_token: str, course_id: int) -> str:
         canvas_token: Token de autenticación Canvas del usuario (variable api-aula).
         course_id: ID del curso.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         quizzes = await canvas.get_quiz_list(course_id)
     if not quizzes:
         return "Este curso no tiene cuestionarios."
@@ -404,7 +406,7 @@ async def get_quiz(canvas_token: str, course_id: int, quiz_id: int) -> str:
         course_id: ID del curso.
         quiz_id: ID del cuestionario.
     """
-    async with _client(canvas_token) as canvas:
+    async with (await _client(canvas_token)) as canvas:
         q = await canvas.get_quiz(course_id, quiz_id)
     due = q.get("due_at") or "sin fecha límite"
     pts = q.get("points_possible")

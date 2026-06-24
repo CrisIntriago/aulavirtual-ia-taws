@@ -40,11 +40,15 @@ ANTHROPIC_API_KEY=  # Only needed for agent.py
 The project has two independent execution modes that share the same Canvas data layer:
 
 ```
+token_manager.py          TokenManager (in-memory, per-process)
+      │                   Mints + auto-rotates a "fallback" Canvas access token per user
+      │
 canvas_client.py          CanvasClient (async httpx)
       │                   Raw Canvas REST API v1 calls
       │
 mcp_server.py             FastMCP instance
       │                   @mcp.tool() wrappers that format responses as strings
+      │                   _client() resolves canvas_token → TokenManager.get_active_token() first
       │
       ├── main.py          FastAPI app → mounts MCP at /mcp (streamable HTTP)
       │                    Used by external integrations (Jelou, Claude Desktop, etc.)
@@ -62,6 +66,18 @@ mcp_server.py             FastMCP instance
 - `config.py` uses `pydantic-settings` — env vars are automatically loaded from `.env` and validated at import time.
 
 - The Canvas token is requested by CLI at runtime, not loaded from `.env`.
+
+### Token lifecycle (`token_manager.py`)
+
+Canvas personal access tokens have no OAuth refresh flow, but a valid token can regenerate itself via `PUT /api/v1/users/self/tokens/{id}` (`{"regenerate": 1}`), which resets any expiration Canvas attached to it. `TokenManager` exploits this so a user only has to paste a token once:
+
+- Each MCP tool call passes `canvas_token` (the token Jelou has saved for that user, the `api-aula` variable). `mcp_server._client()` resolves it through `token_manager.get_active_token(canvas_token)` *before* constructing `CanvasClient`.
+- On first use for a given token, `TokenManager` mints a sibling "fallback" token (`POST /api/v1/users/self/tokens`) and stores it **in memory only**, keyed by `sha256(original_token)`.
+- A background `asyncio.Task` regenerates that fallback token every 5 minutes (`REFRESH_INTERVAL_SECONDS`) for as long as the process is alive, so it never goes stale.
+- State is per-process and not persisted to disk/DB — a redeploy/restart on Railway clears it and the next call re-mints a fallback from whatever `canvas_token` Jelou still has saved. Entries idle for >24h (`IDLE_TTL_SECONDS`) are pruned to bound memory growth.
+- This assumes Jelou keeps sending the *same* original token string per user across calls (it does, via `saveInMemory`/`api-aula`) — that string is the lookup key into the in-memory store.
+
+**Known limitation**: in-memory storage doesn't survive a Railway redeploy/restart and doesn't share state across multiple instances. See [TODO.md](TODO.md) for the plan to move this to a database when that becomes a real problem.
 
 ### MCP server endpoint
 
