@@ -31,3 +31,35 @@ No es urgente mientras se corra una sola instancia de Railway y los
 redeploys sean poco frecuentes — pero es la causa más probable si en el
 futuro los usuarios reportan que "se les pide el token de nuevo" después
 de un deploy.
+
+### Decisión (sesión 2026-06-24): quedarse en memoria por ahora
+
+Ya existe una base de datos Jelou provisionada (`jelou-espol`, plan NANO,
+~$7.50/mes) con una colección `aulavirtualespol` (campos `user`, `token`)
+que casi calza con `_UserTokenState`, pero le faltan dos campos para ser
+1:1: `fallback_token_id` (number) y `refreshed_at` (number/date).
+
+Recomendación: **no migrar todavía**. Mover `get_active_token()` de un
+dict en memoria a la DB convierte un lookup gratis e in-process en un
+round-trip de red en *cada* llamada a una tool MCP (se invoca por cada
+request de cualquier usuario), y agrega un nuevo modo de falla: si la DB
+duerme/tiene un hiccup, se rompe la resolución de token para todos en vez
+de simplemente caer al token original. Migrar tiene sentido recién
+cuando: (a) Railway corre más de una réplica, o (b) los redeploys son
+frecuentes y algún usuario reporta tener que reenviar el token después de
+uno — el trigger que ya menciona el TODO arriba.
+
+Si llega ese momento, el mapeo sería:
+- `user` (ya existe) = `sha256(canvas_token original)` (la `key` actual)
+- `token` (ya existe) = `fallback_token`
+- agregar `fallback_token_id` (number) y `refreshed_at` (number/date) vía
+  `jelou databases collections update jelou-espol aulavirtualespol`
+- reemplazar `self._states: dict` por lecturas/escrituras async contra el
+  REST API de Datum (`https://gateway.jelou.ai/datum-db/jelou-espol-zegrvw/api`),
+  manteniendo el `asyncio.Lock` por usuario para evitar regeneraciones
+  concurrentes.
+
+Nota: la restricción "No uses la base de datos" en `VALIDADOR_JELOU.md`
+es sobre el flujo de validación inicial de Jelou (ese skill no debe tocar
+Datum directamente) — no bloquea que `TokenManager` persista ahí como
+otro proceso/propósito distinto.
