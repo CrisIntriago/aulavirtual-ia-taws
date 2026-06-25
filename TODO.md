@@ -63,3 +63,20 @@ Nota: la restricción "No uses la base de datos" en `VALIDADOR_JELOU.md`
 es sobre el flujo de validación inicial de Jelou (ese skill no debe tocar
 Datum directamente) — no bloquea que `TokenManager` persista ahí como
 otro proceso/propósito distinto.
+
+### Descartado (sesión 2026-06-25): OAuth2 con refresh token
+
+Se evaluó reemplazar el hack de regenerate-cada-5-min por el flujo OAuth2
+nativo de Canvas (access token corto + refresh token de larga duración),
+que es el mecanismo "correcto" para esto. Requiere una Developer Key
+registrada en el Canvas de ESPOL por un admin de su TI — no se tiene ese
+contacto, así que la puerta queda cerrada por ahora. **Se sigue con
+PAT + fallback token regenerado cada 5 min en memoria**, sin cambios.
+Si en algún momento aparece un contacto de TI/admin de Canvas en ESPOL,
+retomar esta opción antes que migrar a BD — resuelve el problema de raíz
+en vez de parchearlo.
+
+Pendiente de explorar (no descartado, solo no abordado aún): ajustar el
+intervalo de refresh fijo de 5 min — ver si se puede leer el `expires_at`
+real que Canvas le pone al token, o cambiar a refresh perezoso (solo al
+recibir 401), para reducir llamadas innecesarias a Canvas/BD.
